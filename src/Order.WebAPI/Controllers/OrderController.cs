@@ -1,6 +1,8 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Order.Service;
+using Order.Service.Specifications;
+using Order.WebAPI.ViewModels;
 using System;
 using System.Threading.Tasks;
 
@@ -19,9 +21,11 @@ namespace OrderService.WebAPI.Controllers
 
         [HttpGet]
         [ProducesResponseType(StatusCodes.Status200OK)]
-        public async Task<IActionResult> Get()
+        public async Task<IActionResult> GetFiltered([FromQuery] GetOrdersParameters parameters = null)
         {
-            var orders = await _orderService.GetOrdersAsync();
+            var ordersSpecification = parameters?.AsOrderSpecification();
+            var orders = await _orderService.GetOrdersAsync(ordersSpecification);
+            Console.WriteLine("Radkova query");
             return Ok(orders);
         }
 
