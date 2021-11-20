@@ -1,10 +1,13 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using NUnit.Framework;
 using Order.Data;
 using Order.Data.Entities;
 using Order.Service.Specifications;
 using System;
 using System.Collections.Generic;
+using System.Data.Common;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -14,6 +17,7 @@ namespace Order.Service.Tests
     {
         private IOrderService _orderService;
         private IOrderRepository _orderRepository;
+        private DbConnection _connection;
         private OrderContext _orderContext;
 
         private readonly Guid _orderStatusCreatedId = Guid.NewGuid();
@@ -30,12 +34,18 @@ namespace Order.Service.Tests
         public async Task Setup()
         {
             var options = new DbContextOptionsBuilder<OrderContext>()
-                .UseInMemoryDatabase(Guid.NewGuid().ToString())
-                .EnableDetailedErrors(true)
-                .EnableSensitiveDataLogging(true)
+                //.UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .UseSqlite(CreateInMemoryDatabase())
+                //.EnableDetailedErrors(true)
+                //.EnableSensitiveDataLogging(true)
                 .Options;
 
+            _connection = RelationalOptionsExtension.Extract(options).Connection;
+
             _orderContext = new OrderContext(options);
+            _orderContext.Database.EnsureDeleted();
+            _orderContext.Database.EnsureCreated();
+
             _orderRepository = new OrderRepository(_orderContext);
             _orderService = new OrderService(_orderRepository);
 
@@ -47,6 +57,23 @@ namespace Order.Service.Tests
             };
 
             await AddReferenceDataAsync(_orderContext);
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+
+            _connection.Dispose();
+            _orderContext.Dispose();
+        }
+
+        private static DbConnection CreateInMemoryDatabase()
+        {
+            var connection = new SqliteConnection("Filename=:memory:");
+
+            connection.Open();
+
+            return connection;
         }
 
         [Test]

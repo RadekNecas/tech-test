@@ -25,7 +25,6 @@ namespace OrderService.WebAPI.Controllers
         {
             var ordersSpecification = parameters?.AsOrderSpecification();
             var orders = await _orderService.GetOrdersAsync(ordersSpecification);
-            Console.WriteLine("Radkova query");
             return Ok(orders);
         }
 
