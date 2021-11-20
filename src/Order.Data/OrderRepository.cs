@@ -39,6 +39,13 @@ namespace Order.Data
             return orders;
         }
 
+        public async Task<IEnumerable<OrderSummary>> GetOrdersAsync(string status)
+        {
+            var orders = await GetOrdersAsync();
+
+            return orders.Where(o => o.StatusName.Equals(status));
+        }
+
         public async Task<OrderDetail> GetOrderByIdAsync(Guid orderId)
         {
             var orderIdBytes = orderId.ToByteArray();

@@ -1,5 +1,6 @@
 ﻿using Order.Data;
 using Order.Model;
+using Order.Service.Specifications;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -15,9 +16,18 @@ namespace Order.Service
             _orderRepository = orderRepository;
         }
 
-        public async Task<IEnumerable<OrderSummary>> GetOrdersAsync()
+        public async Task<IEnumerable<OrderSummary>> GetOrdersAsync(OrderSpecification specification = null)
         {
-            var orders = await _orderRepository.GetOrdersAsync();
+            IEnumerable<OrderSummary> orders;
+            if(specification != null && specification.Status != null)
+            {
+                orders = await _orderRepository.GetOrdersAsync(specification.Status.Trim());
+            }
+            else
+            {
+                orders = await _orderRepository.GetOrdersAsync();
+            }
+
             return orders;
         }
 

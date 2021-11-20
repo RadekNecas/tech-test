@@ -9,6 +9,8 @@ namespace Order.Data
     {
         Task<IEnumerable<OrderSummary>> GetOrdersAsync();
 
+        Task<IEnumerable<OrderSummary>> GetOrdersAsync(string status);
+
         Task<OrderDetail> GetOrderByIdAsync(Guid orderId);
     }
 }
