@@ -11,5 +11,7 @@ namespace Order.Service
         Task<IReadOnlyList<OrderSummary>> GetOrdersAsync(ListOrdersSpecification specification = null);
         
         Task<OrderDetail> GetOrderByIdAsync(Guid orderId);
+
+        Task<OrderSummary> UpdateOrderAsync(Guid orderId, OrderToUpdate orderToUpdate);
     }
 }

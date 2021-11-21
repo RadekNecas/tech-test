@@ -1,4 +1,5 @@
-﻿using Order.Data.Specifications;
+﻿using Order.Data.Entities;
+using Order.Data.Specifications;
 using Order.Model;
 using System;
 using System.Collections.Generic;
@@ -13,5 +14,7 @@ namespace Order.Data
         Task<OrderDetail> GetOrderByIdAsync(Guid orderId);
 
         Task<IReadOnlyList<OrderSummary>> GetOrdersAsync(ISpecification<Entities.Order, OrderSummary> specification);
+
+        Task<OrderSummary> UpdateOrderStatus(Guid orderId, OrderStatus newStatus);
     }
 }

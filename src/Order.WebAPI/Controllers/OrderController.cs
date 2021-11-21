@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Order.Model;
 using Order.Service;
 using Order.WebAPI.ViewModels;
 using System;
@@ -41,6 +42,20 @@ namespace OrderService.WebAPI.Controllers
             {
                 return NotFound();
             }
+        }
+
+        [HttpPatch("{orderId}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> UpdateOrder(Guid orderId, [FromBody]OrderToUpdate orderToUpdate)
+        {
+            var updatedOrder = await _orderService.UpdateOrderAsync(orderId, orderToUpdate);
+            if(updatedOrder == null)
+            {
+                return NotFound();
+            }
+
+            return Ok(updatedOrder);
         }
     }
 }

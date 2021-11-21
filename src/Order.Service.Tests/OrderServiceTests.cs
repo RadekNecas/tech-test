@@ -5,6 +5,7 @@ using NUnit.Framework;
 using Order.Data;
 using Order.Data.Entities;
 using Order.Data.Specifications.Evaluators;
+using Order.Model;
 using Order.Service.Specifications;
 using System;
 using System.Collections.Generic;
@@ -17,7 +18,9 @@ namespace Order.Service.Tests
     public class OrderServiceTests
     {
         private IOrderService _orderService;
+        private SpecificationEvaluator _specificationEvaluator;
         private IOrderRepository _orderRepository;
+        private IOrderStatusRepository _orderStatusRepository;
         private DbConnection _connection;
         private OrderContext _orderContext;
 
@@ -46,8 +49,10 @@ namespace Order.Service.Tests
             _orderContext.Database.EnsureDeleted();
             _orderContext.Database.EnsureCreated();
 
-            _orderRepository = new OrderRepository(_orderContext, new SpecificationEvaluator());
-            _orderService = new OrderService(_orderRepository);
+            _specificationEvaluator = new SpecificationEvaluator();
+            _orderRepository = new OrderRepository(_orderContext, _specificationEvaluator);
+            _orderStatusRepository = new OrderStatusRepository(_orderContext, _specificationEvaluator);
+            _orderService = new OrderService(_orderRepository, _orderStatusRepository);
 
             _orderStatuses = new Dictionary<Guid, string>
             {
@@ -305,6 +310,114 @@ namespace Order.Service.Tests
             }
         }
 
+        public static IEnumerable<object> UpdateNullParametersSource()
+        {
+            yield return new object[] { null };
+            yield return new object[] { new OrderToUpdate { StatusName = null } };
+        }
+
+        [TestCaseSource(nameof(UpdateNullParametersSource))]
+        public async Task UpdateOrderAsync_NullValuesForOrderToUpdate_ExceptionThrown(OrderToUpdate orderToUpdate)
+        {
+            // Arrange
+            var orderId = Guid.NewGuid();
+            await AddOrder(orderId, 1, _orderStatusCreatedId);
+
+            // Act, Assert
+            Assert.ThrowsAsync<ArgumentNullException>(async () => await _orderService.UpdateOrderAsync(orderId, orderToUpdate));
+        }
+
+        [Test]
+        public async Task UpdateOrderAsync_OrderToUpdateWithNotExistingStatus_ExceptionThrown()
+        {
+            // Arrange
+            var orderId = Guid.NewGuid();
+            await AddOrder(orderId, 1, _orderStatusCreatedId);
+
+            var notExistingStatus = string.Join("-", _orderStatuses.Values);
+            OrderToUpdate orderToUpdate = new OrderToUpdate { StatusName = notExistingStatus };
+
+            // Act, Assert
+            Assert.ThrowsAsync<InvalidOperationException>(async () => await _orderService.UpdateOrderAsync(orderId, orderToUpdate));
+        }
+
+        [Test]
+        public async Task UpdateOrderAsync_NotExistingOrderId_NullReturned()
+        {
+            // Arrange
+            var orderId = Guid.NewGuid();
+            var notExistingOrderId = Guid.NewGuid();
+            await AddOrder(orderId, 1, _orderStatusCreatedId);
+
+            OrderToUpdate orderToUpdate = new OrderToUpdate { StatusName = _orderStatuses[_orderStatusInProgressId] };
+
+            // Act
+            var result = await _orderService.UpdateOrderAsync(notExistingOrderId, orderToUpdate);
+
+            // Assert
+            Assert.IsNull(result);
+        }
+
+        [Test]
+        public async Task UpdateOrderAsync_CorrectParameters_UpdatedEntityReturned()
+        {
+            // Arrange
+            var orderId = Guid.NewGuid();
+            await AddOrder(orderId, 1, _orderStatusCreatedId);
+
+            var newStatus = _orderStatuses[_orderStatusInProgressId];
+            OrderToUpdate orderToUpdate = new OrderToUpdate { StatusName = newStatus };
+
+            // Act
+            var result = await _orderService.UpdateOrderAsync(orderId, orderToUpdate);
+
+            // Assert
+            Assert.IsNotNull(result);
+            Assert.AreEqual(orderId, result.Id, "Incorrect result returned. OrderId does not match updated Order.");
+            Assert.AreEqual(newStatus, result.StatusName, "Result StatusName property does not match updated value.");
+            Assert.AreEqual(_orderStatusInProgressId, result.StatusId, "Result StatusId property does not match updated value.");
+        }
+
+        [Test]
+        public async Task UpdateOrderAsync_CorrectParameters_EntityCorrectlyUpdated()
+        {
+            // Arrange
+            var orderId = Guid.NewGuid();
+            await AddOrder(orderId, 1, _orderStatusCreatedId);
+
+            var newStatus = _orderStatuses[_orderStatusInProgressId];
+            OrderToUpdate orderToUpdate = new OrderToUpdate { StatusName = newStatus };
+
+            // Act
+            await _orderService.UpdateOrderAsync(orderId, orderToUpdate);
+
+            // Assert
+            var expectedUpdated = await _orderRepository.GetOrderByIdAsync(orderId);
+            Assert.AreEqual(newStatus, expectedUpdated.StatusName, "StatusName is not correctly updated.");
+            Assert.AreEqual(_orderStatusInProgressId, expectedUpdated.StatusId, "StatusId is not correctly updated.");
+        }
+
+        [Test]
+        public async Task UpdateOrderAsync_CorrectParameters_OtherEntitiesUnchanged()
+        {
+            // Arrange
+            var orderId = Guid.NewGuid();
+            await AddOrder(orderId, 1, _orderStatusCreatedId);
+
+            var orderId2 = Guid.NewGuid();
+            await AddOrder(orderId2, 1, _orderStatusCreatedId);
+
+            var newStatus = _orderStatuses[_orderStatusInProgressId];
+            OrderToUpdate orderToUpdate = new OrderToUpdate { StatusName = newStatus };
+
+            // Act
+            await _orderService.UpdateOrderAsync(orderId, orderToUpdate);
+
+            // Assert
+            var expectedNotUpdated = await _orderRepository.GetOrderByIdAsync(orderId2);
+            Assert.AreEqual(_orderStatuses[_orderStatusCreatedId], expectedNotUpdated.StatusName, "StatusName should not be changed in not updated entity.");
+            Assert.AreEqual(_orderStatusCreatedId, expectedNotUpdated.StatusId, "StatusId should not be changed in not updated entity.");
+        }
 
         private async Task AddOrder(Guid orderId, int quantity, Guid statusId)
         {
@@ -318,7 +431,7 @@ namespace Order.Service.Tests
                 StatusId = statusId.ToByteArray(),
             });
 
-            _orderContext.OrderItem.Add(new OrderItem
+            _orderContext.OrderItem.Add(new Data.Entities.OrderItem
             {
                 Id = Guid.NewGuid().ToByteArray(),
                 OrderId = orderIdBytes,
