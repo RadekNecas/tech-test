@@ -193,5 +193,15 @@ namespace Order.Data.Entities
                 }
             }
         }
+
+        /// <summary>
+        /// Sqlite is used only for in memory database in tests.
+        /// Todo: This might be replaced with proper conversion in method above.
+        /// </summary>
+        /// <returns></returns>
+        public bool IsInMemoryDatabase()
+        {
+            return Database.IsInMemory() || Database.ProviderName == "Microsoft.EntityFrameworkCore.Sqlite";
+        }
     }
 }
