@@ -1,7 +1,7 @@
 ﻿using Order.Data;
-using Order.Data.Entities;
 using Order.Data.Specifications;
 using Order.Model;
+using Order.Service.Exceptions;
 using Order.Service.Specifications;
 using System;
 using System.Collections.Generic;
@@ -52,7 +52,7 @@ namespace Order.Service
             var newStatus = await _orderStatusRepository.GetOrderStatusAsync(new OrderStatusByNameSpecification(orderToUpdate.StatusName.Trim()));
             if(newStatus == null)
             {
-                throw new InvalidOperationException($"Status with name {orderToUpdate.StatusName} does not exist");
+                throw new InvalidApiParameterException(nameof(orderToUpdate.StatusName), $"Status with name {orderToUpdate.StatusName} does not exist");
             }
 
             // TODO: Here might be added other status validation like if it is possible to change to final status.
@@ -70,8 +70,10 @@ namespace Order.Service
 
             if(orderProductNames.Count() != existingProducts.Count())
             {
-                var missingProducts = orderProductNames.Where(n => !existingProducts.ContainsKey(n)).ToList();
-                throw new InvalidOperationException($"Only already existing product can be used to create order. Products that don't exist: '{string.Join(",", missingProducts)}'");
+                var missingProducts = orderProductNames.Where(n => !existingProducts.ContainsKey(n));
+                var missingProductsMessages = missingProducts.Select(e => $"Only already existing product can be used to create order.Product '{ missingProducts }' does not exist.");
+                
+                throw new InvalidApiParameterException("productName", missingProductsMessages);
             }
 
             var createdStatus = await _orderStatusRepository.GetOrderStatusAsync(new OrderStatusByNameSpecification("Created"));
