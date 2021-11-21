@@ -1,6 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Order.Data.Entities;
-using Order.Data.Repositories;
 using Order.Data.Specifications;
 using Order.Data.Specifications.Evaluators;
 using Order.Data.Specifications.OrderDetailSpec;
@@ -11,17 +10,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 
-namespace Order.Data
+namespace Order.Data.Repositories
 {
-    public class OrderRepository : IOrderRepository
+    public class OrderRepository : BaseRepository<Entities.Order>, IOrderRepository
     {
-        private readonly OrderContext _orderContext;
-        private readonly ISpecificationEvaluator _specificationEvaluator;
-
-        public OrderRepository(OrderContext orderContext, ISpecificationEvaluator specificationEvaluator)
+        public OrderRepository(OrderContext orderContext, ISpecificationEvaluator specificationEvaluator) : base(orderContext, specificationEvaluator)
         {
-            _orderContext = orderContext;
-            _specificationEvaluator = specificationEvaluator;
         }
 
         public async Task<IReadOnlyList<OrderSummary>> GetOrdersAsync()
@@ -63,22 +57,12 @@ namespace Order.Data
             return existingOrder;
         }
 
-        public async Task AddOrderAsync(Data.Entities.Order newOrder)
+        public async Task AddOrderAsync(Entities.Order newOrder)
         {
             _orderContext.Order.Add(newOrder);
             await _orderContext.SaveChangesAsync();
         }
 
-
-        private IQueryable<TResult> EvaluateSpecification<TResult>(ISpecification<Entities.Order, TResult> specification)
-        {
-            return _specificationEvaluator.EvaluateSpecification(specification, _orderContext.Set<Entities.Order>());
-        }
-
-        private IQueryable<Entities.Order> EvaluateSpecification(ISpecification<Entities.Order> specification)
-        {
-            return _specificationEvaluator.EvaluateSpecification(specification, _orderContext.Set<Entities.Order>());
-        }
 
         /// <summary>
         /// I'm using attach to update if possible, because I don't want to send another request to load entity from database
@@ -90,7 +74,7 @@ namespace Order.Data
         private void UpdateEntity(OrderStatus newStatus, OrderSummary existingOrder)
         {
             var orderIdBytes = existingOrder.Id.ToByteArray();
-            var localEntity = _orderContext.Order.Local.FirstOrDefault(x => _orderContext.IsInMemoryDatabase() 
+            var localEntity = _orderContext.Order.Local.FirstOrDefault(x => _orderContext.IsInMemoryDatabase()
                                                             ? x.Id.SequenceEqual(orderIdBytes)
                                                             : x.Id == orderIdBytes);
 

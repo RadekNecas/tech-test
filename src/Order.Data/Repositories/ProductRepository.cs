@@ -3,31 +3,20 @@ using Order.Data.Entities;
 using Order.Data.Specifications;
 using Order.Data.Specifications.Evaluators;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 
-namespace Order.Data
+namespace Order.Data.Repositories
 {
-    public class ProductRepository : IProductRepository
+    public class ProductRepository : BaseRepository<OrderProduct>, IProductRepository
     {
-        private readonly OrderContext _orderContext;
-        private readonly ISpecificationEvaluator _specificationEvaluator;
-
-        public ProductRepository(OrderContext orderContext, ISpecificationEvaluator specificationEvaluator)
+        public ProductRepository(OrderContext orderContext, ISpecificationEvaluator specificationEvaluator) : base(orderContext, specificationEvaluator)
         {
-            _orderContext = orderContext;
-            _specificationEvaluator = specificationEvaluator;
         }
 
         public async Task<IReadOnlyList<OrderProduct>> GetProducts(ISpecification<OrderProduct> specification)
         {
             var query = EvaluateSpecification(specification);
             return await query.ToListAsync();
-        }
-
-        private IQueryable<OrderProduct> EvaluateSpecification(ISpecification<OrderProduct> specification)
-        {
-            return _specificationEvaluator.EvaluateSpecification(specification, _orderContext.Set<OrderProduct>());
         }
     }
 }
