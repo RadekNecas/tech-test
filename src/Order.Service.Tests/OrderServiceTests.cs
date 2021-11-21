@@ -7,6 +7,7 @@ using Order.Data;
 using Order.Data.Entities;
 using Order.Data.Specifications.Evaluators;
 using Order.Model;
+using Order.Service.Exceptions;
 using Order.Service.Specifications;
 using System;
 using System.Collections.Generic;
@@ -347,7 +348,7 @@ namespace Order.Service.Tests
             OrderToUpdate orderToUpdate = new OrderToUpdate { StatusName = notExistingStatus };
 
             // Act, Assert
-            Assert.ThrowsAsync<InvalidOperationException>(async () => await _orderService.UpdateOrderAsync(orderId, orderToUpdate));
+            Assert.ThrowsAsync<InvalidApiParameterException>(async () => await _orderService.UpdateOrderAsync(orderId, orderToUpdate));
         }
 
         [Test]
@@ -426,6 +427,97 @@ namespace Order.Service.Tests
             var expectedNotUpdated = await _orderRepository.GetOrderByIdAsync(orderId2);
             Assert.AreEqual(_orderStatuses[_orderStatusCreatedId], expectedNotUpdated.StatusName, "StatusName should not be changed in not updated entity.");
             Assert.AreEqual(_orderStatusCreatedId, expectedNotUpdated.StatusId, "StatusId should not be changed in not updated entity.");
+        }
+
+        [Test]
+        public async Task AddOrderAsync_NullOrder_ThrowsException()
+        {
+            // Act, Assert
+            Assert.ThrowsAsync<ArgumentNullException>(async() => await _orderService.AddOrderAsync(null));
+        }
+
+        public async Task AddOrderAsync_NotExistingProductInParameter_ThrowsException()
+        {
+            // Arrange
+            var notExistingProduct = $"NotExitingProduct - {Guid.NewGuid()}";
+            var invalidProduct = new AddOrder
+            {
+                CustomerId = Guid.NewGuid(),
+                ResellerId = Guid.NewGuid(),
+                Items = new List<AddOrderItem>
+                {
+                    new AddOrderItem
+                    {
+                        ProductName = notExistingProduct,
+                        Quantity = 10
+                    }
+                }
+            };
+
+            // Act, Assert
+            Assert.ThrowsAsync<InvalidApiParameterException>(async () => await _orderService.AddOrderAsync(invalidProduct));
+        }
+
+        [Test]
+        public async Task AddOrderAsync_CorrectParameters_DataInsertedCorrectly()
+        {
+            // Arrange
+            var existingProduct = $"100GB Mailbox";
+            var orderToCreate = new AddOrder
+            {
+                CustomerId = Guid.NewGuid(),
+                ResellerId = Guid.NewGuid(),
+                Items = new List<AddOrderItem>
+                {
+                    new AddOrderItem
+                    {
+                        ProductName = existingProduct,
+                        Quantity = 10
+                    }
+                }
+            };
+
+            // Act
+            var result = await _orderService.AddOrderAsync(orderToCreate);
+
+            // Assert
+            var dbOrder = await _orderRepository.GetOrderByIdAsync(result.Id);
+            Assert.NotNull(dbOrder);
+            Assert.AreEqual(dbOrder.ResellerId, orderToCreate.ResellerId, "ResellerId don't match.");
+            Assert.AreEqual(dbOrder.CustomerId, orderToCreate.CustomerId, "CustomerId don't match.");
+            Assert.AreEqual(dbOrder.StatusId, _orderStatusCreatedId, "StatusId should be created");
+            Assert.AreEqual(dbOrder.StatusName, _orderStatuses[_orderStatusCreatedId], "StatusName should be created.");
+            Assert.AreEqual(dbOrder.CreatedDate, DefaultCurrentUtcDate, "CreatedDate not set correctly.");
+        }
+
+        [Test]
+        public async Task AddOrderAsync_CorrectParameters_DataReturnedCorrectly()
+        {
+            // Arrange
+            var existingProduct = $"100GB Mailbox";
+            var orderToCreate = new AddOrder
+            {
+                CustomerId = Guid.NewGuid(),
+                ResellerId = Guid.NewGuid(),
+                Items = new List<AddOrderItem>
+                {
+                    new AddOrderItem
+                    {
+                        ProductName = existingProduct,
+                        Quantity = 10
+                    }
+                }
+            };
+
+            // Act
+            var result = await _orderService.AddOrderAsync(orderToCreate);
+
+            // Assert
+            Assert.AreEqual(result.ResellerId, orderToCreate.ResellerId, "ResellerId don't match.");
+            Assert.AreEqual(result.CustomerId, orderToCreate.CustomerId, "CustomerId don't match.");
+            Assert.AreEqual(result.StatusId, _orderStatusCreatedId, "StatusId should be created");
+            Assert.AreEqual(result.StatusName, _orderStatuses[_orderStatusCreatedId], "StatusName should be created.");
+            Assert.AreEqual(result.CreatedDate, DefaultCurrentUtcDate, "CreatedDate not set correctly.");
         }
 
         private async Task AddOrder(Guid orderId, int quantity, Guid statusId)

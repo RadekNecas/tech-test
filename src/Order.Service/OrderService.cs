@@ -65,19 +65,34 @@ namespace Order.Service
         {
             if (orderToAdd == null) throw new ArgumentNullException(nameof(orderToAdd), "Order to add must be specified");
 
+            Dictionary<string, Data.Entities.OrderProduct> existingProducts = await GetValidatedExistingProducts(orderToAdd);
+            var createdStatus = await _orderStatusRepository.GetOrderStatusAsync(new OrderStatusByNameSpecification("Created"));
+            
+            Data.Entities.Order newOrder = CreateOrder(orderToAdd, existingProducts, createdStatus);
+            await _orderRepository.AddOrderAsync(newOrder);
+
+            return newOrder.AsOrderSummary();
+        }
+
+
+        private async Task<Dictionary<string, Data.Entities.OrderProduct>> GetValidatedExistingProducts(AddOrder orderToAdd)
+        {
             var orderProductNames = orderToAdd.Items.Select(i => i.ProductName.Trim()).Distinct().ToList();
             var existingProducts = (await _productRepository.GetProducts(new ProductsByNamesSpecification(orderProductNames))).ToDictionary(p => p.Name);
 
-            if(orderProductNames.Count() != existingProducts.Count())
+            if (orderProductNames.Count() != existingProducts.Count())
             {
                 var missingProducts = orderProductNames.Where(n => !existingProducts.ContainsKey(n));
                 var missingProductsMessages = missingProducts.Select(e => $"Only already existing product can be used to create order.Product '{ missingProducts }' does not exist.");
-                
+
                 throw new InvalidApiParameterException("productName", missingProductsMessages);
             }
 
-            var createdStatus = await _orderStatusRepository.GetOrderStatusAsync(new OrderStatusByNameSpecification("Created"));
+            return existingProducts;
+        }
 
+        private Data.Entities.Order CreateOrder(AddOrder orderToAdd, Dictionary<string, Data.Entities.OrderProduct> existingProducts, Data.Entities.OrderStatus createdStatus)
+        {
             var newOrder = new Data.Entities.Order
             {
                 Id = Guid.NewGuid().ToByteArray(),
@@ -99,10 +114,7 @@ namespace Order.Service
                 ServiceId = existingProducts[addItem.ProductName].Service.Id,
                 Quantity = addItem.Quantity
             }).ToList();
-
-            await _orderRepository.AddOrderAsync(newOrder);
-
-            return newOrder.AsOrderSummary();
+            return newOrder;
         }
     }
 }
