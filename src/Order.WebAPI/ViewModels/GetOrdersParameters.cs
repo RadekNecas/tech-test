@@ -6,6 +6,6 @@ namespace Order.WebAPI.ViewModels
     {
         public string Status { get; set; }
 
-        public OrderSpecification AsOrderSpecification() => new OrderSpecification(Status);
+        public ListOrdersSpecification AsOrderSpecification() => new ListOrdersSpecification(Status);
     }
 }

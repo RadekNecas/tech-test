@@ -8,7 +8,7 @@ namespace Order.Service
 {
     public interface IOrderService
     {
-        Task<IReadOnlyList<OrderSummary>> GetOrdersAsync(OrderSpecification specification = null);
+        Task<IReadOnlyList<OrderSummary>> GetOrdersAsync(ListOrdersSpecification specification = null);
         
         Task<OrderDetail> GetOrderByIdAsync(Guid orderId);
     }

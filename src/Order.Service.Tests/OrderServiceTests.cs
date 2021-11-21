@@ -183,7 +183,7 @@ namespace Order.Service.Tests
             var expectedReturnedOrderIds = new[] { orderId2, orderId3 };
 
             // Act
-            var orders = await _orderService.GetOrdersAsync(new OrderSpecification(_orderStatuses[_orderStatusInProgressId]));
+            var orders = await _orderService.GetOrdersAsync(new ListOrdersSpecification(_orderStatuses[_orderStatusInProgressId]));
 
             // Assert
             Assert.AreEqual(orders.Count(), 2, "There should be only two items returned.");
@@ -211,7 +211,7 @@ namespace Order.Service.Tests
             var status = $" \t {createdStatusName} \t \r\n \n  ";
 
             // Act
-            var orders = await _orderService.GetOrdersAsync(new OrderSpecification(status));
+            var orders = await _orderService.GetOrdersAsync(new ListOrdersSpecification(status));
 
             // Assert
             Assert.AreEqual(orders.Count(), 1, "There should be only one item returned.");
@@ -233,7 +233,7 @@ namespace Order.Service.Tests
             var notExistingOrderStatus = string.Join("-", _orderStatuses.Values);
 
             // Act
-            var orders = await _orderService.GetOrdersAsync(new OrderSpecification(notExistingOrderStatus));
+            var orders = await _orderService.GetOrdersAsync(new ListOrdersSpecification(notExistingOrderStatus));
 
             // Assert
             Assert.IsEmpty(orders, "Empty collection should be returned for not existing status.");
@@ -248,7 +248,7 @@ namespace Order.Service.Tests
             await AddOrder(Guid.NewGuid(), 3, _orderStatusInProgressId);
 
             // Act
-            var orders = await _orderService.GetOrdersAsync(new OrderSpecification(string.Empty));
+            var orders = await _orderService.GetOrdersAsync(new ListOrdersSpecification(string.Empty));
 
             // Assert
             Assert.IsEmpty(orders, "Empty collection should be returned for empty string as a status Filter. There is no status with empty string as a name in the database. If user does not want to filter by status he has to use null as a Specification or null as a Status in Specification.");
@@ -286,7 +286,7 @@ namespace Order.Service.Tests
             await AddOrder(Guid.NewGuid(), 2, _orderStatusInProgressId);
             await AddOrder(Guid.NewGuid(), 3, _orderStatusInProgressId);
 
-            var specWithNullStatus = new OrderSpecification(null);
+            var specWithNullStatus = new ListOrdersSpecification(null);
 
             // Act
             var ordersSpecificationWithNullStatus = (await _orderService.GetOrdersAsync(specWithNullStatus)).ToList();
