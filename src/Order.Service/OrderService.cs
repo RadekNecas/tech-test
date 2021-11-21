@@ -12,6 +12,8 @@ namespace Order.Service
 {
     public class OrderService : IOrderService
     {
+        private const string CompletedStatus = "Completed";
+
         private readonly IOrderRepository _orderRepository;
         private readonly IOrderStatusRepository _orderStatusRepository;
         private readonly IProductRepository _productRepository;
@@ -72,6 +74,21 @@ namespace Order.Service
             await _orderRepository.AddOrderAsync(newOrder);
 
             return newOrder.AsOrderSummary();
+        }
+
+        public async Task<IReadOnlyList<ProfitPerMonth>> GetProfitByMonthAsync()
+        {
+            var completedOrders = await GetOrdersAsync(new ListOrdersSpecification(CompletedStatus));
+            var result = completedOrders.GroupBy(o => new { o.CreatedDate.Year, o.CreatedDate.Month })
+                                        .Select(x => new ProfitPerMonth
+                                        {
+                                            Year = x.Key.Year,
+                                            Month = x.Key.Month,
+                                            Profit = x.Sum(y => y.TotalPrice) - x.Sum(y => y.TotalCost)
+                                        })
+                                        .OrderByDescending(p => p.Year).ThenByDescending(p => p.Month)
+                                        .ToList();
+            return result;
         }
 
 

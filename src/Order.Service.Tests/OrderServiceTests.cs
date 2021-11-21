@@ -520,15 +520,109 @@ namespace Order.Service.Tests
             Assert.AreEqual(result.CreatedDate, DefaultCurrentUtcDate, "CreatedDate not set correctly.");
         }
 
-        private async Task AddOrder(Guid orderId, int quantity, Guid statusId)
+        [Test]
+        public async Task GetProfitByMonthAsync_NoOrders_EmptyCollectionReturned()
         {
+            // Act
+            var result = await _orderService.GetProfitByMonthAsync();
+
+            // Assert
+            Assert.IsNotNull(result);
+            Assert.IsEmpty(result);
+        }
+
+        [Test]
+        public async Task GetProfitByMonthAsync_MultipleNotCompletedOrdersInDifferentMonths_EmptyCollectionReturned()
+        {
+            // Arrange
+            await AddOrder(Guid.NewGuid(), 10, _orderStatusCreatedId, DefaultCurrentUtcDate);                   // Reference point in time
+            await AddOrder(Guid.NewGuid(), 10, _orderStatusInProgressId, DefaultCurrentUtcDate.AddDays(1));     // Same year, month, different day
+            await AddOrder(Guid.NewGuid(), 10, _orderStatusInProgressId, DefaultCurrentUtcDate.AddYears(-1));   // Same day, month but different year
+
+            // Act
+            var result = await _orderService.GetProfitByMonthAsync();
+
+            // Assert
+            Assert.IsNotNull(result);
+            Assert.IsEmpty(result);
+        }
+
+        [Test]
+        public async Task GetProfitByMonthAsync_MultipleCompletedOrdersInDifferentMonths_CorrectDataReturned()
+        {
+            // Arrange
+            await AddOrder(Guid.NewGuid(), 10, _orderStatusCompletedId, DefaultCurrentUtcDate);                   // Reference point in time
+            await AddOrder(Guid.NewGuid(), 10, _orderStatusCompletedId, DefaultCurrentUtcDate.AddDays(1));     // Same year, month, different day
+            await AddOrder(Guid.NewGuid(), 10, _orderStatusCompletedId, DefaultCurrentUtcDate.AddYears(-1));   // Same day, month but different year
+
+            // Act
+            var result = await _orderService.GetProfitByMonthAsync();
+
+            // Assert
+            Assert.AreEqual(2, result.Count, "There should be only two results");
+
+            var monthResults = result.Where(r => r.Month == DefaultCurrentUtcDate.Month && r.Year == DefaultCurrentUtcDate.Year).ToList();
+            Assert.AreEqual(1, monthResults.Count, "There should be only one result for this month.");
+            Assert.AreEqual(2m, monthResults.First().Profit, "Invalid profit for this month.");
+
+            monthResults = result.Where(r => r.Month == DefaultCurrentUtcDate.Month && r.Year == DefaultCurrentUtcDate.Year - 1).ToList();
+            Assert.AreEqual(1, monthResults.Count, "There should be only one result for previous year.");
+            Assert.AreEqual(1m, monthResults.First().Profit, "Invalid profit for previous year.");
+        }
+
+        [Test]
+        public async Task GetProfitByMonthAsync_MultipleOrdersInDifferentMonths_CorrectDataForOnlyCompletedOrdersReturned()
+        {
+            // Arrange
+            await AddOrder(Guid.NewGuid(), 10, _orderStatusCompletedId, DefaultCurrentUtcDate);                   // Reference point in time
+            await AddOrder(Guid.NewGuid(), 10, _orderStatusInProgressId, DefaultCurrentUtcDate.AddDays(1));     // Same year, month, different day
+            await AddOrder(Guid.NewGuid(), 10, _orderStatusCompletedId, DefaultCurrentUtcDate.AddYears(-1));   // Same day, month but different year
+
+            // Act
+            var result = await _orderService.GetProfitByMonthAsync();
+
+            // Assert
+            Assert.AreEqual(2, result.Count, "There should be only two results");
+
+            var monthResults = result.Where(r => r.Month == DefaultCurrentUtcDate.Month && r.Year == DefaultCurrentUtcDate.Year).ToList();
+            Assert.AreEqual(1, monthResults.Count, "There should be only one result for this month.");
+            Assert.AreEqual(1m, monthResults.First().Profit, "Invalid profit for this month.");
+
+            monthResults = result.Where(r => r.Month == DefaultCurrentUtcDate.Month && r.Year == DefaultCurrentUtcDate.Year - 1).ToList();
+            Assert.AreEqual(1, monthResults.Count, "There should be only one result for previous year.");
+            Assert.AreEqual(1m, monthResults.First().Profit, "Invalid profit for previous year.");
+        }
+
+        [Test]
+        public async Task GetProfitByMonthAsync_MultipleCompletedOrdersInDifferentMonths_ResultCorrectlyOrdered()
+        {
+            // Arrange
+            await AddOrder(Guid.NewGuid(), 10, _orderStatusCompletedId, DefaultCurrentUtcDate);                   // Reference point in time
+            await AddOrder(Guid.NewGuid(), 10, _orderStatusCompletedId, DefaultCurrentUtcDate.AddDays(1));     // Same year, month, different day
+            await AddOrder(Guid.NewGuid(), 10, _orderStatusCompletedId, DefaultCurrentUtcDate.AddYears(-1));   // Same day, month but different year
+
+            // Act
+            var result = await _orderService.GetProfitByMonthAsync();
+
+            // Assert
+            Assert.AreEqual(DefaultCurrentUtcDate.Year, result.First().Year, "Invalid year of the first record.");
+            Assert.AreEqual(DefaultCurrentUtcDate.Month, result.First().Month, "Invalid month of the first record.");
+
+            Assert.AreEqual(DefaultCurrentUtcDate.Year-1, result[1].Year, "Invalid year of the second record.");
+            Assert.AreEqual(DefaultCurrentUtcDate.Month, result[1].Month, "Invalid month of the second record.");
+        }
+
+        private async Task AddOrder(Guid orderId, int quantity, Guid statusId, DateTime? createdDate = null)
+        {
+            var createdDt = createdDate ?? DefaultCurrentUtcDate;
+
             var orderIdBytes = orderId.ToByteArray();
             _orderContext.Order.Add(new Data.Entities.Order
             {
                 Id = orderIdBytes,
                 ResellerId = Guid.NewGuid().ToByteArray(),
                 CustomerId = Guid.NewGuid().ToByteArray(),
-                CreatedDate = DateTime.Now,
+                CreatedDate = createdDt,
                 StatusId = statusId.ToByteArray(),
             });
 

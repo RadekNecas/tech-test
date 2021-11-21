@@ -35,14 +35,6 @@ namespace OrderService.WebAPI.Controllers
         public async Task<IActionResult> GetOrderById(Guid orderId)
         {
             var order = await _orderService.GetOrderByIdAsync(orderId);
-            //if (order != null)
-            //{
-            //    return Ok(order);
-            //}
-            //else
-            //{
-            //    return NotFound();
-            //}
             if(order == null)
             {
                 throw new ApiNotFoundException($"Invalid request. Order with Id '{orderId}' does not exist.");

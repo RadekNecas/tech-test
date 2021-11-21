@@ -14,5 +14,6 @@ namespace Order.Service
 
         Task<OrderSummary> UpdateOrderAsync(Guid orderId, OrderToUpdate orderToUpdate);
         Task<OrderSummary> AddOrderAsync(AddOrder orderToAdd);
+        Task<IReadOnlyList<ProfitPerMonth>> GetProfitByMonthAsync();
     }
 }
