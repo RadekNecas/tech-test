@@ -1,7 +1,6 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Order.Service;
-using Order.Service.Specifications;
 using Order.WebAPI.ViewModels;
 using System;
 using System.Threading.Tasks;
@@ -25,7 +24,6 @@ namespace OrderService.WebAPI.Controllers
         {
             var ordersSpecification = parameters?.AsOrderSpecification();
             var orders = await _orderService.GetOrdersAsync(ordersSpecification);
-            Console.WriteLine("Radkova query");
             return Ok(orders);
         }
 

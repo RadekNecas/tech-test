@@ -1,4 +1,5 @@
 ﻿using Order.Data;
+using Order.Data.Specifications;
 using Order.Model;
 using Order.Service.Specifications;
 using System;
@@ -18,17 +19,15 @@ namespace Order.Service
 
         public async Task<IEnumerable<OrderSummary>> GetOrdersAsync(OrderSpecification specification = null)
         {
-            IEnumerable<OrderSummary> orders;
             if(specification != null && specification.Status != null)
             {
-                orders = await _orderRepository.GetOrdersAsync(specification.Status.Trim());
+                var spec = new OrderSummarysWithStatusOrderedByDateSpecification(specification.Status.Trim());
+                return await _orderRepository.GetOrdersAsync(spec);
             }
             else
             {
-                orders = await _orderRepository.GetOrdersAsync();
+                return await _orderRepository.GetOrdersAsync();
             }
-
-            return orders;
         }
 
         public async Task<OrderDetail> GetOrderByIdAsync(Guid orderId)
