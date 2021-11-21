@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 namespace Order.WebAPI.Controllers
 {
     [ApiController]
-    [Route("profit")]
+    [Route("profits")]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public class ProfitController : ControllerBase
