@@ -1,8 +1,18 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Moq;
 using NUnit.Framework;
 using Order.Data;
 using Order.Data.Entities;
+using Order.Data.Repositories;
+using Order.Data.Specifications.Evaluators;
+using Order.Model;
+using Order.Service.Exceptions;
+using Order.Service.Specifications;
 using System;
+using System.Collections.Generic;
+using System.Data.Common;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -11,27 +21,73 @@ namespace Order.Service.Tests
     public class OrderServiceTests
     {
         private IOrderService _orderService;
+        private Mock<IDateTimeProvider> _dateTimeProviderMock;
+        private SpecificationEvaluator _specificationEvaluator;
         private IOrderRepository _orderRepository;
+        private IOrderStatusRepository _orderStatusRepository;
+        private IProductRepository _productRepository;
+        private DbConnection _connection;
         private OrderContext _orderContext;
 
-        private readonly byte[] _orderStatusCreatedId = Guid.NewGuid().ToByteArray();
+        private readonly Guid _orderStatusCreatedId = Guid.NewGuid();
+        private readonly Guid _orderStatusInProgressId = Guid.NewGuid();
+        private readonly Guid _orderStatusCompletedId = Guid.NewGuid();
+
         private readonly byte[] _orderServiceEmailId = Guid.NewGuid().ToByteArray();
         private readonly byte[] _orderProductEmailId = Guid.NewGuid().ToByteArray();
+
+        private Dictionary<Guid, string> _orderStatuses;
+
+        private DateTime DefaultCurrentUtcDate => new DateTime(2021, 11, 21, 15, 0, 0);
+        
 
         [SetUp]
         public async Task Setup()
         {
             var options = new DbContextOptionsBuilder<OrderContext>()
-                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .UseSqlite(CreateInMemoryDatabase())
                 .EnableDetailedErrors(true)
                 .EnableSensitiveDataLogging(true)
                 .Options;
 
+            _connection = RelationalOptionsExtension.Extract(options).Connection;
+
             _orderContext = new OrderContext(options);
-            _orderRepository = new OrderRepository(_orderContext);
-            _orderService = new OrderService(_orderRepository);
+            _orderContext.Database.EnsureDeleted();
+            _orderContext.Database.EnsureCreated();
+
+            _dateTimeProviderMock = new Mock<IDateTimeProvider>();
+            _dateTimeProviderMock.Setup(m => m.GetCurrentUtcDate()).Returns(DefaultCurrentUtcDate);
+
+            _specificationEvaluator = new SpecificationEvaluator();
+            _orderRepository = new OrderRepository(_orderContext, _specificationEvaluator);
+            _orderStatusRepository = new OrderStatusRepository(_orderContext, _specificationEvaluator);
+            _productRepository = new ProductRepository(_orderContext, _specificationEvaluator);
+            _orderService = new OrderService(_orderRepository, _orderStatusRepository, _productRepository, _dateTimeProviderMock.Object);
+
+            _orderStatuses = new Dictionary<Guid, string>
+            {
+                { _orderStatusCreatedId, "Created" },
+                { _orderStatusInProgressId, "InProgress" },
+                { _orderStatusCompletedId, "Completed" },
+            };
 
             await AddReferenceDataAsync(_orderContext);
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            _connection.Dispose();
+            _orderContext.Dispose();
+        }
+
+        private static DbConnection CreateInMemoryDatabase()
+        {
+            var connection = new SqliteConnection("Filename=:memory:");
+            connection.Open();
+
+            return connection;
         }
 
         [Test]
@@ -39,13 +95,13 @@ namespace Order.Service.Tests
         {
             // Arrange
             var orderId1 = Guid.NewGuid();
-            await AddOrder(orderId1, 1);
+            await AddOrder(orderId1, 1, _orderStatusCreatedId);
 
             var orderId2 = Guid.NewGuid();
-            await AddOrder(orderId2, 2);
+            await AddOrder(orderId2, 2, _orderStatusCreatedId);
 
             var orderId3 = Guid.NewGuid();
-            await AddOrder(orderId3, 3);
+            await AddOrder(orderId3, 3, _orderStatusCreatedId);
 
             // Act
             var orders = await _orderService.GetOrdersAsync();
@@ -59,13 +115,13 @@ namespace Order.Service.Tests
         {
             // Arrange
             var orderId1 = Guid.NewGuid();
-            await AddOrder(orderId1, 1);
+            await AddOrder(orderId1, 1, _orderStatusCreatedId);
 
             var orderId2 = Guid.NewGuid();
-            await AddOrder(orderId2, 2);
+            await AddOrder(orderId2, 2, _orderStatusCreatedId);
 
             var orderId3 = Guid.NewGuid();
-            await AddOrder(orderId3, 3);
+            await AddOrder(orderId3, 3, _orderStatusCreatedId);
 
             // Act
             var orders = await _orderService.GetOrdersAsync();
@@ -90,7 +146,7 @@ namespace Order.Service.Tests
         {
             // Arrange
             var orderId1 = Guid.NewGuid();
-            await AddOrder(orderId1, 1);
+            await AddOrder(orderId1, 1, _orderStatusCreatedId);
 
             // Act
             var order = await _orderService.GetOrderByIdAsync(orderId1);
@@ -104,7 +160,7 @@ namespace Order.Service.Tests
         {
             // Arrange
             var orderId1 = Guid.NewGuid();
-            await AddOrder(orderId1, 1);
+            await AddOrder(orderId1, 1, _orderStatusCreatedId);
 
             // Act
             var order = await _orderService.GetOrderByIdAsync(orderId1);
@@ -118,7 +174,7 @@ namespace Order.Service.Tests
         {
             // Arrange
             var orderId1 = Guid.NewGuid();
-            await AddOrder(orderId1, 2);
+            await AddOrder(orderId1, 2, _orderStatusCreatedId);
 
             // Act
             var order = await _orderService.GetOrderByIdAsync(orderId1);
@@ -128,19 +184,450 @@ namespace Order.Service.Tests
             Assert.AreEqual(1.8m, order.TotalPrice);
         }
 
-        private async Task AddOrder(Guid orderId, int quantity)
+        [Test]
+        public async Task GetOrders_UseSpecificationWithExistingStatusFilter_OnlyRecordsWithCorrectStatusReturned()
         {
+            // Arrange
+            var orderId1 = Guid.NewGuid();
+            await AddOrder(orderId1, 1, _orderStatusCreatedId);
+
+            var orderId2 = Guid.NewGuid();
+            await AddOrder(orderId2, 2, _orderStatusInProgressId);
+
+            var orderId3 = Guid.NewGuid();
+            await AddOrder(orderId3, 3, _orderStatusInProgressId);
+
+            var expectedReturnedOrderIds = new[] { orderId2, orderId3 };
+
+            // Act
+            var orders = await _orderService.GetOrdersAsync(new ListOrdersSpecification(_orderStatuses[_orderStatusInProgressId]));
+
+            // Assert
+            Assert.AreEqual(orders.Count(), 2, "There should be only two items returned.");
+            int i = 0;
+            foreach(var order in orders)
+            {
+                Assert.AreEqual(_orderStatusInProgressId, order.StatusId, $"Invalid StatusId for Order at position {i}");
+                Assert.AreEqual(_orderStatuses[_orderStatusInProgressId], order.StatusName, $"Invalid StatusName for Order at position {i}");
+                Assert.Contains(order.Id, expectedReturnedOrderIds, $"Invalid order returned.");
+                i++;
+            }
+        }
+
+        [Test]
+        public async Task GetOrders_UseSpecificationWithExistingStatusWithSpacesArroundFilter_RecordForTrimmedStatusReturned()
+        {
+            // Arrange
+            var orderId1 = Guid.NewGuid();
+            var createdStatusName = _orderStatuses[_orderStatusCreatedId];
+            await AddOrder(orderId1, 1, _orderStatusCreatedId);
+
+            await AddOrder(Guid.NewGuid(), 2, _orderStatusInProgressId);
+            await AddOrder(Guid.NewGuid(), 3, _orderStatusInProgressId);
+
+            var status = $" \t {createdStatusName} \t \r\n \n  ";
+
+            // Act
+            var orders = await _orderService.GetOrdersAsync(new ListOrdersSpecification(status));
+
+            // Assert
+            Assert.AreEqual(orders.Count(), 1, "There should be only one item returned.");
+
+            var returnedOrder = orders.First();
+            Assert.AreEqual(orderId1, returnedOrder.Id, "Unexpected OrderId");
+            Assert.AreEqual(_orderStatusCreatedId, returnedOrder.StatusId, "Unexpected StatusId");
+            Assert.AreEqual(createdStatusName, returnedOrder.StatusName, "Unexpected StatusName");
+        }
+
+        [Test]
+        public async Task GetOrders_UseSpecificationWithNotExistingStatusFilter_EmptyReturned()
+        {
+            // Arrange
+            await AddOrder(Guid.NewGuid(), 1, _orderStatusCreatedId);
+            await AddOrder(Guid.NewGuid(), 2, _orderStatusInProgressId);
+            await AddOrder(Guid.NewGuid(), 3, _orderStatusInProgressId);
+
+            var notExistingOrderStatus = string.Join("-", _orderStatuses.Values);
+
+            // Act
+            var orders = await _orderService.GetOrdersAsync(new ListOrdersSpecification(notExistingOrderStatus));
+
+            // Assert
+            Assert.IsEmpty(orders, "Empty collection should be returned for not existing status.");
+        }
+
+        [Test]
+        public async Task GetOrders_UseSpecificationWithEmptyStrungStatus_EmptyReturned()
+        {
+            // Arrange
+            await AddOrder(Guid.NewGuid(), 1, _orderStatusCreatedId);
+            await AddOrder(Guid.NewGuid(), 2, _orderStatusInProgressId);
+            await AddOrder(Guid.NewGuid(), 3, _orderStatusInProgressId);
+
+            // Act
+            var orders = await _orderService.GetOrdersAsync(new ListOrdersSpecification(string.Empty));
+
+            // Assert
+            Assert.IsEmpty(orders, "Empty collection should be returned for empty string as a status Filter. There is no status with empty string as a name in the database. If user does not want to filter by status he has to use null as a Specification or null as a Status in Specification.");
+        }
+
+        [Test]
+        public async Task GetOrders_UseNullSpecification_ResultSameAsWithoutSpecification()
+        {
+            // Arrange
+            await AddOrder(Guid.NewGuid(), 1, _orderStatusCreatedId);
+            await AddOrder(Guid.NewGuid(), 2, _orderStatusInProgressId);
+            await AddOrder(Guid.NewGuid(), 3, _orderStatusInProgressId);
+
+            // Act
+            var ordersNullSpecification = (await _orderService.GetOrdersAsync(null)).ToList();
+            var ordersWithoutSpecification = (await _orderService.GetOrdersAsync()).ToList();
+
+            // Assert
+            Assert.AreEqual(ordersNullSpecification.Count(), ordersWithoutSpecification.Count(), "There should be exactly same amount of orders in both collections");
+            for(int i = 0; i < ordersNullSpecification.Count(); i++)
+            {
+                Model.OrderSummary nullOrder = ordersNullSpecification[i];
+                var noSpecOrder = ordersWithoutSpecification[i];
+                Assert.AreEqual(nullOrder.Id, noSpecOrder.Id, "Collections should be exactly the same including ordering. OrderId does not match.");
+                Assert.AreEqual(nullOrder.StatusId, noSpecOrder.StatusId, "Collections should be exactly the same including ordering. StatusId does not match.");
+                Assert.AreEqual(nullOrder.StatusName, noSpecOrder.StatusName, "Collections should be exactly the same including ordering. StatusName does not match.");
+            }
+        }
+
+        [Test]
+        public async Task GetOrders_UseSpecificationWithNullStatus_ResultSameAsWithoutSpecification()
+        {
+            // Arrange
+            await AddOrder(Guid.NewGuid(), 1, _orderStatusCreatedId);
+            await AddOrder(Guid.NewGuid(), 2, _orderStatusInProgressId);
+            await AddOrder(Guid.NewGuid(), 3, _orderStatusInProgressId);
+
+            var specWithNullStatus = new ListOrdersSpecification(null);
+
+            // Act
+            var ordersSpecificationWithNullStatus = (await _orderService.GetOrdersAsync(specWithNullStatus)).ToList();
+            var ordersWithoutSpecification = (await _orderService.GetOrdersAsync()).ToList();
+
+            // Assert
+            Assert.AreEqual(ordersSpecificationWithNullStatus.Count(), ordersWithoutSpecification.Count(), "There should be exactly same amount of orders in both collections");
+            for (int i = 0; i < ordersSpecificationWithNullStatus.Count(); i++)
+            {
+                Model.OrderSummary nullOrder = ordersSpecificationWithNullStatus[i];
+                var noSpecOrder = ordersWithoutSpecification[i];
+                Assert.AreEqual(nullOrder.Id, noSpecOrder.Id, "Collections should be exactly the same including ordering. OrderId does not match.");
+                Assert.AreEqual(nullOrder.StatusId, noSpecOrder.StatusId, "Collections should be exactly the same including ordering. StatusId does not match.");
+                Assert.AreEqual(nullOrder.StatusName, noSpecOrder.StatusName, "Collections should be exactly the same including ordering. StatusName does not match.");
+            }
+        }
+
+        public static IEnumerable<object> UpdateNullParametersSource()
+        {
+            yield return new object[] { null };
+            yield return new object[] { new OrderToUpdate { StatusName = null } };
+        }
+
+        [TestCaseSource(nameof(UpdateNullParametersSource))]
+        public async Task UpdateOrderAsync_NullValuesForOrderToUpdate_ExceptionThrown(OrderToUpdate orderToUpdate)
+        {
+            // Arrange
+            var orderId = Guid.NewGuid();
+            await AddOrder(orderId, 1, _orderStatusCreatedId);
+
+            // Act, Assert
+            Assert.ThrowsAsync<ArgumentNullException>(async () => await _orderService.UpdateOrderAsync(orderId, orderToUpdate));
+        }
+
+        [Test]
+        public async Task UpdateOrderAsync_OrderToUpdateWithNotExistingStatus_ExceptionThrown()
+        {
+            // Arrange
+            var orderId = Guid.NewGuid();
+            await AddOrder(orderId, 1, _orderStatusCreatedId);
+
+            var notExistingStatus = string.Join("-", _orderStatuses.Values);
+            OrderToUpdate orderToUpdate = new OrderToUpdate { StatusName = notExistingStatus };
+
+            // Act, Assert
+            Assert.ThrowsAsync<InvalidApiParameterException>(async () => await _orderService.UpdateOrderAsync(orderId, orderToUpdate));
+        }
+
+        [Test]
+        public async Task UpdateOrderAsync_NotExistingOrderId_NullReturned()
+        {
+            // Arrange
+            var orderId = Guid.NewGuid();
+            var notExistingOrderId = Guid.NewGuid();
+            await AddOrder(orderId, 1, _orderStatusCreatedId);
+
+            OrderToUpdate orderToUpdate = new OrderToUpdate { StatusName = _orderStatuses[_orderStatusInProgressId] };
+
+            // Act
+            var result = await _orderService.UpdateOrderAsync(notExistingOrderId, orderToUpdate);
+
+            // Assert
+            Assert.IsNull(result);
+        }
+
+        [Test]
+        public async Task UpdateOrderAsync_CorrectParameters_UpdatedEntityReturned()
+        {
+            // Arrange
+            var orderId = Guid.NewGuid();
+            await AddOrder(orderId, 1, _orderStatusCreatedId);
+
+            var newStatus = _orderStatuses[_orderStatusInProgressId];
+            OrderToUpdate orderToUpdate = new OrderToUpdate { StatusName = newStatus };
+
+            // Act
+            var result = await _orderService.UpdateOrderAsync(orderId, orderToUpdate);
+
+            // Assert
+            Assert.IsNotNull(result);
+            Assert.AreEqual(orderId, result.Id, "Incorrect result returned. OrderId does not match updated Order.");
+            Assert.AreEqual(newStatus, result.StatusName, "Result StatusName property does not match updated value.");
+            Assert.AreEqual(_orderStatusInProgressId, result.StatusId, "Result StatusId property does not match updated value.");
+        }
+
+        [Test]
+        public async Task UpdateOrderAsync_CorrectParameters_EntityCorrectlyUpdated()
+        {
+            // Arrange
+            var orderId = Guid.NewGuid();
+            await AddOrder(orderId, 1, _orderStatusCreatedId);
+
+            var newStatus = _orderStatuses[_orderStatusInProgressId];
+            OrderToUpdate orderToUpdate = new OrderToUpdate { StatusName = newStatus };
+
+            // Act
+            await _orderService.UpdateOrderAsync(orderId, orderToUpdate);
+
+            // Assert
+            var expectedUpdated = await _orderRepository.GetOrderByIdAsync(orderId);
+            Assert.AreEqual(newStatus, expectedUpdated.StatusName, "StatusName is not correctly updated.");
+            Assert.AreEqual(_orderStatusInProgressId, expectedUpdated.StatusId, "StatusId is not correctly updated.");
+        }
+
+        [Test]
+        public async Task UpdateOrderAsync_CorrectParameters_OtherEntitiesUnchanged()
+        {
+            // Arrange
+            var orderId = Guid.NewGuid();
+            await AddOrder(orderId, 1, _orderStatusCreatedId);
+
+            var orderId2 = Guid.NewGuid();
+            await AddOrder(orderId2, 1, _orderStatusCreatedId);
+
+            var newStatus = _orderStatuses[_orderStatusInProgressId];
+            OrderToUpdate orderToUpdate = new OrderToUpdate { StatusName = newStatus };
+
+            // Act
+            await _orderService.UpdateOrderAsync(orderId, orderToUpdate);
+
+            // Assert
+            var expectedNotUpdated = await _orderRepository.GetOrderByIdAsync(orderId2);
+            Assert.AreEqual(_orderStatuses[_orderStatusCreatedId], expectedNotUpdated.StatusName, "StatusName should not be changed in not updated entity.");
+            Assert.AreEqual(_orderStatusCreatedId, expectedNotUpdated.StatusId, "StatusId should not be changed in not updated entity.");
+        }
+
+        [Test]
+        public void AddOrderAsync_NullOrder_ThrowsException()
+        {
+            // Act, Assert
+            Assert.ThrowsAsync<ArgumentNullException>(async() => await _orderService.AddOrderAsync(null));
+        }
+
+        public void AddOrderAsync_NotExistingProductInParameter_ThrowsException()
+        {
+            // Arrange
+            var notExistingProduct = $"NotExitingProduct - {Guid.NewGuid()}";
+            var invalidProduct = new AddOrder
+            {
+                CustomerId = Guid.NewGuid(),
+                ResellerId = Guid.NewGuid(),
+                Items = new List<AddOrderItem>
+                {
+                    new AddOrderItem
+                    {
+                        ProductName = notExistingProduct,
+                        Quantity = 10
+                    }
+                }
+            };
+
+            // Act, Assert
+            Assert.ThrowsAsync<InvalidApiParameterException>(async () => await _orderService.AddOrderAsync(invalidProduct));
+        }
+
+        [Test]
+        public async Task AddOrderAsync_CorrectParameters_DataInsertedCorrectly()
+        {
+            // Arrange
+            var existingProduct = $"100GB Mailbox";
+            var orderToCreate = new AddOrder
+            {
+                CustomerId = Guid.NewGuid(),
+                ResellerId = Guid.NewGuid(),
+                Items = new List<AddOrderItem>
+                {
+                    new AddOrderItem
+                    {
+                        ProductName = existingProduct,
+                        Quantity = 10
+                    }
+                }
+            };
+
+            // Act
+            var result = await _orderService.AddOrderAsync(orderToCreate);
+
+            // Assert
+            var dbOrder = await _orderRepository.GetOrderByIdAsync(result.Id);
+            Assert.NotNull(dbOrder);
+            Assert.AreEqual(dbOrder.ResellerId, orderToCreate.ResellerId, "ResellerId don't match.");
+            Assert.AreEqual(dbOrder.CustomerId, orderToCreate.CustomerId, "CustomerId don't match.");
+            Assert.AreEqual(dbOrder.StatusId, _orderStatusCreatedId, "StatusId should be created");
+            Assert.AreEqual(dbOrder.StatusName, _orderStatuses[_orderStatusCreatedId], "StatusName should be created.");
+            Assert.AreEqual(dbOrder.CreatedDate, DefaultCurrentUtcDate, "CreatedDate not set correctly.");
+        }
+
+        [Test]
+        public async Task AddOrderAsync_CorrectParameters_DataReturnedCorrectly()
+        {
+            // Arrange
+            var existingProduct = $"100GB Mailbox";
+            var orderToCreate = new AddOrder
+            {
+                CustomerId = Guid.NewGuid(),
+                ResellerId = Guid.NewGuid(),
+                Items = new List<AddOrderItem>
+                {
+                    new AddOrderItem
+                    {
+                        ProductName = existingProduct,
+                        Quantity = 10
+                    }
+                }
+            };
+
+            // Act
+            var result = await _orderService.AddOrderAsync(orderToCreate);
+
+            // Assert
+            Assert.AreEqual(result.ResellerId, orderToCreate.ResellerId, "ResellerId don't match.");
+            Assert.AreEqual(result.CustomerId, orderToCreate.CustomerId, "CustomerId don't match.");
+            Assert.AreEqual(result.StatusId, _orderStatusCreatedId, "StatusId should be created");
+            Assert.AreEqual(result.StatusName, _orderStatuses[_orderStatusCreatedId], "StatusName should be created.");
+            Assert.AreEqual(result.CreatedDate, DefaultCurrentUtcDate, "CreatedDate not set correctly.");
+        }
+
+        [Test]
+        public async Task GetProfitByMonthAsync_NoOrders_EmptyCollectionReturned()
+        {
+            // Act
+            var result = await _orderService.GetProfitByMonthAsync();
+
+            // Assert
+            Assert.IsNotNull(result);
+            Assert.IsEmpty(result);
+        }
+
+        [Test]
+        public async Task GetProfitByMonthAsync_MultipleNotCompletedOrdersInDifferentMonths_EmptyCollectionReturned()
+        {
+            // Arrange
+            await AddOrder(Guid.NewGuid(), 10, _orderStatusCreatedId, DefaultCurrentUtcDate);                   // Reference point in time
+            await AddOrder(Guid.NewGuid(), 10, _orderStatusInProgressId, DefaultCurrentUtcDate.AddDays(1));     // Same year, month, different day
+            await AddOrder(Guid.NewGuid(), 10, _orderStatusInProgressId, DefaultCurrentUtcDate.AddYears(-1));   // Same day, month but different year
+
+            // Act
+            var result = await _orderService.GetProfitByMonthAsync();
+
+            // Assert
+            Assert.IsNotNull(result);
+            Assert.IsEmpty(result);
+        }
+
+        [Test]
+        public async Task GetProfitByMonthAsync_MultipleCompletedOrdersInDifferentMonths_CorrectDataReturned()
+        {
+            // Arrange
+            await AddOrder(Guid.NewGuid(), 10, _orderStatusCompletedId, DefaultCurrentUtcDate);                   // Reference point in time
+            await AddOrder(Guid.NewGuid(), 10, _orderStatusCompletedId, DefaultCurrentUtcDate.AddDays(1));     // Same year, month, different day
+            await AddOrder(Guid.NewGuid(), 10, _orderStatusCompletedId, DefaultCurrentUtcDate.AddYears(-1));   // Same day, month but different year
+
+            // Act
+            var result = await _orderService.GetProfitByMonthAsync();
+
+            // Assert
+            Assert.AreEqual(2, result.Count, "There should be only two results");
+
+            var monthResults = result.Where(r => r.Month == DefaultCurrentUtcDate.Month && r.Year == DefaultCurrentUtcDate.Year).ToList();
+            Assert.AreEqual(1, monthResults.Count, "There should be only one result for this month.");
+            Assert.AreEqual(2m, monthResults.First().Profit, "Invalid profit for this month.");
+
+            monthResults = result.Where(r => r.Month == DefaultCurrentUtcDate.Month && r.Year == DefaultCurrentUtcDate.Year - 1).ToList();
+            Assert.AreEqual(1, monthResults.Count, "There should be only one result for previous year.");
+            Assert.AreEqual(1m, monthResults.First().Profit, "Invalid profit for previous year.");
+        }
+
+        [Test]
+        public async Task GetProfitByMonthAsync_MultipleOrdersInDifferentMonths_CorrectDataForOnlyCompletedOrdersReturned()
+        {
+            // Arrange
+            await AddOrder(Guid.NewGuid(), 10, _orderStatusCompletedId, DefaultCurrentUtcDate);                   // Reference point in time
+            await AddOrder(Guid.NewGuid(), 10, _orderStatusInProgressId, DefaultCurrentUtcDate.AddDays(1));     // Same year, month, different day
+            await AddOrder(Guid.NewGuid(), 10, _orderStatusCompletedId, DefaultCurrentUtcDate.AddYears(-1));   // Same day, month but different year
+
+            // Act
+            var result = await _orderService.GetProfitByMonthAsync();
+
+            // Assert
+            Assert.AreEqual(2, result.Count, "There should be only two results");
+
+            var monthResults = result.Where(r => r.Month == DefaultCurrentUtcDate.Month && r.Year == DefaultCurrentUtcDate.Year).ToList();
+            Assert.AreEqual(1, monthResults.Count, "There should be only one result for this month.");
+            Assert.AreEqual(1m, monthResults.First().Profit, "Invalid profit for this month.");
+
+            monthResults = result.Where(r => r.Month == DefaultCurrentUtcDate.Month && r.Year == DefaultCurrentUtcDate.Year - 1).ToList();
+            Assert.AreEqual(1, monthResults.Count, "There should be only one result for previous year.");
+            Assert.AreEqual(1m, monthResults.First().Profit, "Invalid profit for previous year.");
+        }
+
+        [Test]
+        public async Task GetProfitByMonthAsync_MultipleCompletedOrdersInDifferentMonths_ResultCorrectlyOrdered()
+        {
+            // Arrange
+            await AddOrder(Guid.NewGuid(), 10, _orderStatusCompletedId, DefaultCurrentUtcDate);                   // Reference point in time
+            await AddOrder(Guid.NewGuid(), 10, _orderStatusCompletedId, DefaultCurrentUtcDate.AddDays(1));     // Same year, month, different day
+            await AddOrder(Guid.NewGuid(), 10, _orderStatusCompletedId, DefaultCurrentUtcDate.AddYears(-1));   // Same day, month but different year
+
+            // Act
+            var result = await _orderService.GetProfitByMonthAsync();
+
+            // Assert
+            Assert.AreEqual(DefaultCurrentUtcDate.Year, result.First().Year, "Invalid year of the first record.");
+            Assert.AreEqual(DefaultCurrentUtcDate.Month, result.First().Month, "Invalid month of the first record.");
+
+            Assert.AreEqual(DefaultCurrentUtcDate.Year-1, result[1].Year, "Invalid year of the second record.");
+            Assert.AreEqual(DefaultCurrentUtcDate.Month, result[1].Month, "Invalid month of the second record.");
+        }
+
+        private async Task AddOrder(Guid orderId, int quantity, Guid statusId, DateTime? createdDate = null)
+        {
+            var createdDt = createdDate ?? DefaultCurrentUtcDate;
+
             var orderIdBytes = orderId.ToByteArray();
             _orderContext.Order.Add(new Data.Entities.Order
             {
                 Id = orderIdBytes,
                 ResellerId = Guid.NewGuid().ToByteArray(),
                 CustomerId = Guid.NewGuid().ToByteArray(),
-                CreatedDate = DateTime.Now,
-                StatusId = _orderStatusCreatedId,
+                CreatedDate = createdDt,
+                StatusId = statusId.ToByteArray(),
             });
 
-            _orderContext.OrderItem.Add(new OrderItem
+            _orderContext.OrderItem.Add(new Data.Entities.OrderItem
             {
                 Id = Guid.NewGuid().ToByteArray(),
                 OrderId = orderIdBytes,
@@ -154,11 +641,14 @@ namespace Order.Service.Tests
 
         private async Task AddReferenceDataAsync(OrderContext orderContext)
         {
-            orderContext.OrderStatus.Add(new OrderStatus
+            foreach (var keyValue in _orderStatuses)
             {
-                Id = _orderStatusCreatedId,
-                Name = "Created",
-            });
+                orderContext.OrderStatus.Add(new OrderStatus
+                {
+                    Id = keyValue.Key.ToByteArray(),
+                    Name = keyValue.Value,
+                });
+            }
 
             orderContext.OrderService.Add(new Data.Entities.OrderService
             {

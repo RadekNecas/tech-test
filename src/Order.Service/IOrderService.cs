@@ -1,4 +1,5 @@
 ﻿using Order.Model;
+using Order.Service.Specifications;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -7,8 +8,12 @@ namespace Order.Service
 {
     public interface IOrderService
     {
-        Task<IEnumerable<OrderSummary>> GetOrdersAsync();
+        Task<IReadOnlyList<OrderSummary>> GetOrdersAsync(ListOrdersSpecification specification = null);
         
         Task<OrderDetail> GetOrderByIdAsync(Guid orderId);
+
+        Task<OrderSummary> UpdateOrderAsync(Guid orderId, OrderToUpdate orderToUpdate);
+        Task<OrderSummary> AddOrderAsync(AddOrder orderToAdd);
+        Task<IReadOnlyList<ProfitPerMonth>> GetProfitByMonthAsync();
     }
 }

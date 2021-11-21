@@ -1,6 +1,9 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Order.Model;
 using Order.Service;
+using Order.Service.Exceptions;
+using Order.WebAPI.ViewModels;
 using System;
 using System.Threading.Tasks;
 
@@ -8,6 +11,8 @@ namespace OrderService.WebAPI.Controllers
 {
     [ApiController]
     [Route("orders")]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
     public class OrderController : ControllerBase
     {
         private readonly IOrderService _orderService;
@@ -18,27 +23,45 @@ namespace OrderService.WebAPI.Controllers
         }
 
         [HttpGet]
-        [ProducesResponseType(StatusCodes.Status200OK)]
-        public async Task<IActionResult> Get()
+        public async Task<IActionResult> GetFiltered([FromQuery] GetOrdersParameters parameters = null)
         {
-            var orders = await _orderService.GetOrdersAsync();
+            var ordersSpecification = parameters?.AsOrderSpecification();
+            var orders = await _orderService.GetOrdersAsync(ordersSpecification);
             return Ok(orders);
         }
 
         [HttpGet("{orderId}")]
-        [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetOrderById(Guid orderId)
         {
             var order = await _orderService.GetOrderByIdAsync(orderId);
-            if (order != null)
+            if(order == null)
             {
-                return Ok(order);
+                throw new ApiNotFoundException($"Invalid request. Order with Id '{orderId}' does not exist.");
             }
-            else
+
+            return Ok(order);
+        }
+
+        [HttpPatch("{orderId}")]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> UpdateOrder(Guid orderId, [FromBody]OrderToUpdate orderToUpdate)
+        {
+            var updatedOrder = await _orderService.UpdateOrderAsync(orderId, orderToUpdate);
+            if(updatedOrder == null)
             {
-                return NotFound();
+                throw new ApiNotFoundException($"Invalid request. Order with Id '{orderId}' does not exist.");
             }
+
+            return Ok(updatedOrder);
+        }
+
+        [HttpPost]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        public async Task<IActionResult> AddOrder([FromBody]AddOrder orderToAdd)
+        {
+            var createdOrder = await _orderService.AddOrderAsync(orderToAdd);
+            return Ok(createdOrder);
         }
     }
 }
