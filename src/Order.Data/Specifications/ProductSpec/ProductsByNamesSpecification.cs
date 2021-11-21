@@ -3,7 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Order.Data.Specifications
+namespace Order.Data.Specifications.ProductSpec
 {
     public class ProductsByNamesSpecification : BaseEmptySpecification<OrderProduct>
     {

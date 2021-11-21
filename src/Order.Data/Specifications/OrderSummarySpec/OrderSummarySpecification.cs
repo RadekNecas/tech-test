@@ -1,13 +1,12 @@
-﻿using Order.Model;
-using System;
+﻿using System;
 using System.Linq;
 using System.Linq.Expressions;
 
-namespace Order.Data.Specifications
+namespace Order.Data.Specifications.OrderSummarySpec
 {
-    public class OrderSummarySpecification : BaseEmptySpecification<Entities.Order, OrderSummary>
+    public class OrderSummarySpecification : BaseEmptySpecification<Entities.Order, Model.OrderSummary>
     {
-        public override Expression<Func<Entities.Order, OrderSummary>> Select { get; }
+        public override Expression<Func<Entities.Order, Model.OrderSummary>> Select { get; }
 
         public OrderSummarySpecification() : base()
         {
@@ -17,7 +16,7 @@ namespace Order.Data.Specifications
                 x => x.Items
             };
 
-            Select = x => new OrderSummary
+            Select = x => new Model.OrderSummary
             {
                 Id = new Guid(x.Id),
                 ResellerId = new Guid(x.ResellerId),

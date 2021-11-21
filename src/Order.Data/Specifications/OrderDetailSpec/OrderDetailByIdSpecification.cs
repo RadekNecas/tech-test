@@ -3,7 +3,7 @@ using System;
 using System.Linq;
 using System.Linq.Expressions;
 
-namespace Order.Data.Specifications
+namespace Order.Data.Specifications.OrderDetailSpec
 {
     public class OrderDetailByIdSpecification : BaseEmptySpecification<Entities.Order, OrderDetail>
     {
@@ -30,7 +30,7 @@ namespace Order.Data.Specifications
                 CreatedDate = order.CreatedDate,
                 TotalCost = order.Items.Sum(x => x.Quantity * x.Product.UnitCost).Value,
                 TotalPrice = order.Items.Sum(x => x.Quantity * x.Product.UnitPrice).Value,
-                Items = order.Items.Select(x => new Model.OrderItem
+                Items = order.Items.Select(x => new OrderItem
                 {
                     Id = new Guid(x.Id),
                     OrderId = new Guid(x.OrderId),

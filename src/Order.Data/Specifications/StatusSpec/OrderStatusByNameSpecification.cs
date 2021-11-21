@@ -1,6 +1,6 @@
 ﻿using Order.Data.Entities;
 
-namespace Order.Data.Specifications
+namespace Order.Data.Specifications.StatusSpec
 {
     public class OrderStatusByNameSpecification : BaseEmptySpecification<OrderStatus>
     {

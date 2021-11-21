@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Order.Data;
-using Order.Data.Entities;
+using Order.Data.Repositories;
 using Order.Data.Specifications.Evaluators;
 using Order.Service;
 

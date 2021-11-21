@@ -1,4 +1,4 @@
-﻿namespace Order.Data.Specifications
+﻿namespace Order.Data.Specifications.OrderSummarySpec
 {
     public class OrderSummarysWithStatusOrderedByDateSpecification : OrderSummarySpecification
     {

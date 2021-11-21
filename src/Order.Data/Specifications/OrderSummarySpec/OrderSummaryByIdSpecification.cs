@@ -1,11 +1,11 @@
 ﻿using System;
 using System.Linq;
 
-namespace Order.Data.Specifications
+namespace Order.Data.Specifications.OrderSummarySpec
 {
-    public class OrderByIdSpecification : BaseEmptySpecification<Entities.Order>
+    public class OrderSummaryByIdSpecification : OrderSummarySpecification
     {
-        public OrderByIdSpecification(Guid orderId, bool isInMemoryDatabase)
+        public OrderSummaryByIdSpecification(Guid orderId, bool isInMemoryDatabase) : base()
         {
             var orderIdBytes = orderId.ToByteArray();
             Query = x => isInMemoryDatabase ? x.Id.SequenceEqual(orderIdBytes) : x.Id == orderIdBytes;
