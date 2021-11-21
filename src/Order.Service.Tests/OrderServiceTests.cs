@@ -431,13 +431,13 @@ namespace Order.Service.Tests
         }
 
         [Test]
-        public async Task AddOrderAsync_NullOrder_ThrowsException()
+        public void AddOrderAsync_NullOrder_ThrowsException()
         {
             // Act, Assert
             Assert.ThrowsAsync<ArgumentNullException>(async() => await _orderService.AddOrderAsync(null));
         }
 
-        public async Task AddOrderAsync_NotExistingProductInParameter_ThrowsException()
+        public void AddOrderAsync_NotExistingProductInParameter_ThrowsException()
         {
             // Arrange
             var notExistingProduct = $"NotExitingProduct - {Guid.NewGuid()}";

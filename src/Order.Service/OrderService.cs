@@ -35,7 +35,7 @@ namespace Order.Service
         {
             if(specification != null && specification.Status != null)
             {
-                var spec = new OrderSummarysWithStatusOrderedByDateSpecification(specification.Status.Trim());
+                var spec = new OrderSummarysByStatusOrderedByDateSpecification(specification.Status.Trim());
                 return await _orderRepository.GetOrdersAsync(spec);
             }
             else
