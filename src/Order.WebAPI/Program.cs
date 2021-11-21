@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Order.Data;
 using Order.Data.Entities;
+using Order.Data.Specifications.Evaluators;
 using Order.Service;
 
 namespace OrderService.WebAPI
@@ -33,6 +34,7 @@ namespace OrderService.WebAPI
 
                     services.AddScoped<IOrderService, Order.Service.OrderService>();
                     services.AddScoped<IOrderRepository, OrderRepository>();
+                    services.AddSingleton<ISpecificationEvaluator, SpecificationEvaluator>();
                 });
     }
 }

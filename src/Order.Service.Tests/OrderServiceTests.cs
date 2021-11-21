@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using NUnit.Framework;
 using Order.Data;
 using Order.Data.Entities;
+using Order.Data.Specifications.Evaluators;
 using Order.Service.Specifications;
 using System;
 using System.Collections.Generic;
@@ -45,7 +46,7 @@ namespace Order.Service.Tests
             _orderContext.Database.EnsureDeleted();
             _orderContext.Database.EnsureCreated();
 
-            _orderRepository = new OrderRepository(_orderContext);
+            _orderRepository = new OrderRepository(_orderContext, new SpecificationEvaluator());
             _orderService = new OrderService(_orderRepository);
 
             _orderStatuses = new Dictionary<Guid, string>

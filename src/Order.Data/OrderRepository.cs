@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Order.Data.Entities;
 using Order.Data.Specifications;
+using Order.Data.Specifications.Evaluators;
 using Order.Model;
 using System;
 using System.Collections.Generic;
@@ -12,10 +13,12 @@ namespace Order.Data
     public class OrderRepository : IOrderRepository
     {
         private readonly OrderContext _orderContext;
+        private readonly ISpecificationEvaluator _specificationEvaluator;
 
-        public OrderRepository(OrderContext orderContext)
+        public OrderRepository(OrderContext orderContext, ISpecificationEvaluator specificationEvaluator)
         {
             _orderContext = orderContext;
+            _specificationEvaluator = specificationEvaluator;
         }
 
         public async Task<IReadOnlyList<OrderSummary>> GetOrdersAsync()
@@ -38,56 +41,7 @@ namespace Order.Data
 
         private IQueryable<TResult> EvaluateSpecification<TResult>(ISpecification<Entities.Order, TResult> specification)
         {
-            IQueryable<Entities.Order> data = _orderContext.Set<Entities.Order>();
-
-            if (specification.HasQuery)
-            {
-                data = data.Where(specification.Query);
-            }
-
-            if (specification.HasOrderBy)
-            {
-                data = data.OrderBy(specification.OrderBy);
-            }
-
-            if (specification.HasOrderByDescending)
-            {
-                data = data.OrderByDescending(specification.OrderByDescending);
-            }
-
-            foreach (var includeClause in specification.Includes)
-            {
-                data = data.Include(includeClause);
-            }
-
-            return data.Select(specification.Select);
-        }
-
-        private IQueryable<Entities.Order> EvaluateSpecification(ISpecification<Entities.Order, Entities.Order> specification)
-        {
-            IQueryable<Entities.Order> data = _orderContext.Set<Entities.Order>();
-
-            if (specification.HasQuery)
-            {
-                data = data.Where(specification.Query);
-            }
-
-            if (specification.HasOrderBy)
-            {
-                data = data.OrderBy(specification.OrderBy);
-            }
-
-            if (specification.HasOrderByDescending)
-            {
-                data = data.OrderByDescending(specification.OrderByDescending);
-            }
-
-            foreach (var includeClause in specification.Includes)
-            {
-                data = data.Include(includeClause);
-            }
-
-            return data;
+            return _specificationEvaluator.EvaluateSpecification(specification, _orderContext.Set<Entities.Order>());
         }
     }
 }
