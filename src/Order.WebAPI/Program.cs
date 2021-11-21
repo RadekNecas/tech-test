@@ -1,11 +1,5 @@
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Order.Data;
-using Order.Data.Repositories;
-using Order.Data.Specifications.Evaluators;
-using Order.Service;
 
 namespace OrderService.WebAPI
 {
@@ -21,25 +15,6 @@ namespace OrderService.WebAPI
                 .ConfigureWebHostDefaults(webBuilder =>
                 {
                     webBuilder.UseStartup<Startup>();
-                })
-                .ConfigureServices((builder, services) =>
-                {
-                    services.AddDbContext<OrderContext>(options =>
-                    {
-                        var serviceOptions = builder.Configuration["OrderConnectionString"];
-                        options
-                        .UseLazyLoadingProxies()
-                        .UseMySQL(serviceOptions);
-                    });
-
-                    services.AddScoped<IOrderService, Order.Service.OrderService>();
-
-                    services.AddScoped<IOrderRepository, OrderRepository>();
-                    services.AddScoped<IOrderStatusRepository, OrderStatusRepository>();
-                    services.AddScoped<IProductRepository, ProductRepository>();
-
-                    services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
-                    services.AddSingleton<ISpecificationEvaluator, SpecificationEvaluator>();
                 });
     }
 }
