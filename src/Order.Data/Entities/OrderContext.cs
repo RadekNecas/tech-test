@@ -1,4 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using System;
+using System.Linq;
 
 namespace Order.Data.Entities
 {
@@ -20,6 +23,14 @@ namespace Order.Data.Entities
         public virtual DbSet<OrderStatus> OrderStatus { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            base.OnModelCreating(modelBuilder);
+
+            ConfigureEntities(modelBuilder);
+            ConfigureConversionsForTestDatabase(modelBuilder);
+        }
+
+        private static void ConfigureEntities(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<Order>(entity =>
             {
@@ -151,10 +162,36 @@ namespace Order.Data.Entities
                     .HasMaxLength(20)
                     .IsUnicode(false);
             });
-
-            OnModelCreatingPartial(modelBuilder);
         }
 
-        partial void OnModelCreatingPartial(ModelBuilder modelBuilder);
+        /// <summary>
+        /// This configuration is required because SQLite provider cannot apply aggregate operators in queries 
+        /// for navigation properties with decimal and DateTimeOffset type.
+        /// SQLite provider is used only for tests, so this change applies only for tests.
+        /// </summary>
+        private void ConfigureConversionsForTestDatabase(ModelBuilder modelBuilder)
+        {
+            if (Database.ProviderName == "Microsoft.EntityFrameworkCore.Sqlite")
+            {
+                foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+                {
+                    var decimalProperties = entityType.ClrType.GetProperties()
+                        .Where(p => p.PropertyType == typeof(decimal));
+                    var dateTimeProperties = entityType.ClrType.GetProperties()
+                        .Where(p => p.PropertyType == typeof(DateTimeOffset));
+
+                    foreach (var property in decimalProperties)
+                    {
+                        modelBuilder.Entity(entityType.Name).Property(property.Name).HasConversion<double>();
+                    }
+
+                    foreach (var property in dateTimeProperties)
+                    {
+                        modelBuilder.Entity(entityType.Name).Property(property.Name)
+                            .HasConversion(new DateTimeOffsetToBinaryConverter());
+                    }
+                }
+            }
+        }
     }
 }
