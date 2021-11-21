@@ -33,8 +33,12 @@ namespace OrderService.WebAPI
                     });
 
                     services.AddScoped<IOrderService, Order.Service.OrderService>();
+
                     services.AddScoped<IOrderRepository, OrderRepository>();
                     services.AddScoped<IOrderStatusRepository, OrderStatusRepository>();
+                    services.AddScoped<IProductRepository, ProductRepository>();
+
+                    services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
                     services.AddSingleton<ISpecificationEvaluator, SpecificationEvaluator>();
                 });
     }

@@ -1,5 +1,7 @@
-﻿using System;
+﻿using Order.Model;
+using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Order.Data.Entities
 {
@@ -18,5 +20,21 @@ namespace Order.Data.Entities
 
         public virtual OrderStatus Status { get; set; }
         public virtual ICollection<OrderItem> Items { get; set; }
+
+        public OrderSummary AsOrderSummary()
+        {
+            return new OrderSummary
+            {
+                Id = new Guid(Id),
+                ResellerId = new Guid(ResellerId),
+                CustomerId = new Guid(CustomerId),
+                StatusId = new Guid(StatusId),
+                StatusName = Status.Name,
+                ItemCount = Items.Count,
+                TotalCost = Items.Sum(i => i.Quantity * i.Product.UnitCost).Value,
+                TotalPrice = Items.Sum(i => i.Quantity * i.Product.UnitPrice).Value,
+                CreatedDate = CreatedDate
+            };
+        }
     }
 }

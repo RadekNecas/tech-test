@@ -1,6 +1,7 @@
 ﻿using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Moq;
 using NUnit.Framework;
 using Order.Data;
 using Order.Data.Entities;
@@ -18,9 +19,11 @@ namespace Order.Service.Tests
     public class OrderServiceTests
     {
         private IOrderService _orderService;
+        private Mock<IDateTimeProvider> _dateTimeProviderMock;
         private SpecificationEvaluator _specificationEvaluator;
         private IOrderRepository _orderRepository;
         private IOrderStatusRepository _orderStatusRepository;
+        private IProductRepository _productRepository;
         private DbConnection _connection;
         private OrderContext _orderContext;
 
@@ -32,6 +35,8 @@ namespace Order.Service.Tests
         private readonly byte[] _orderProductEmailId = Guid.NewGuid().ToByteArray();
 
         private Dictionary<Guid, string> _orderStatuses;
+
+        private DateTime DefaultCurrentUtcDate => new DateTime(2021, 11, 21, 15, 0, 0);
         
 
         [SetUp]
@@ -49,10 +54,14 @@ namespace Order.Service.Tests
             _orderContext.Database.EnsureDeleted();
             _orderContext.Database.EnsureCreated();
 
+            _dateTimeProviderMock = new Mock<IDateTimeProvider>();
+            _dateTimeProviderMock.Setup(m => m.GetCurrentUtcDate()).Returns(DefaultCurrentUtcDate);
+
             _specificationEvaluator = new SpecificationEvaluator();
             _orderRepository = new OrderRepository(_orderContext, _specificationEvaluator);
             _orderStatusRepository = new OrderStatusRepository(_orderContext, _specificationEvaluator);
-            _orderService = new OrderService(_orderRepository, _orderStatusRepository);
+            _productRepository = new ProductRepository(_orderContext, _specificationEvaluator);
+            _orderService = new OrderService(_orderRepository, _orderStatusRepository, _productRepository, _dateTimeProviderMock.Object);
 
             _orderStatuses = new Dictionary<Guid, string>
             {

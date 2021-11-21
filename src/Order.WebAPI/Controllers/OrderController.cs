@@ -57,5 +57,13 @@ namespace OrderService.WebAPI.Controllers
 
             return Ok(updatedOrder);
         }
+
+        [HttpPost]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        public async Task<IActionResult> AddOrder([FromBody]AddOrder orderToAdd)
+        {
+            var createdOrder = await _orderService.AddOrderAsync(orderToAdd);
+            return Ok(createdOrder);
+        }
     }
 }

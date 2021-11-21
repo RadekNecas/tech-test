@@ -13,5 +13,6 @@ namespace Order.Service
         Task<OrderDetail> GetOrderByIdAsync(Guid orderId);
 
         Task<OrderSummary> UpdateOrderAsync(Guid orderId, OrderToUpdate orderToUpdate);
+        Task<OrderSummary> AddOrderAsync(AddOrder orderToAdd);
     }
 }

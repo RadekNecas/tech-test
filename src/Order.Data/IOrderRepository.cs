@@ -15,6 +15,7 @@ namespace Order.Data
 
         Task<IReadOnlyList<OrderSummary>> GetOrdersAsync(ISpecification<Entities.Order, OrderSummary> specification);
 
-        Task<OrderSummary> UpdateOrderStatus(Guid orderId, OrderStatus newStatus);
+        Task<OrderSummary> UpdateOrderStatusAsync(Guid orderId, OrderStatus newStatus);
+        Task AddOrderAsync(Entities.Order newOrder);
     }
 }

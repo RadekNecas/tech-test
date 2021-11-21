@@ -39,7 +39,7 @@ namespace Order.Data
             return await query.AsNoTracking().FirstOrDefaultAsync();
         }
 
-        public async Task<OrderSummary> UpdateOrderStatus(Guid orderId, OrderStatus newStatus)
+        public async Task<OrderSummary> UpdateOrderStatusAsync(Guid orderId, OrderStatus newStatus)
         {
             // I want to keep interface coherent and simple so I want to reuse OrderSummary as a response
             // I can reuse also OrderSummaryByIdSpecification
@@ -58,6 +58,12 @@ namespace Order.Data
             existingOrder.StatusName = newStatus.Name;
 
             return existingOrder;
+        }
+
+        public async Task AddOrderAsync(Data.Entities.Order newOrder)
+        {
+            _orderContext.Order.Add(newOrder);
+            await _orderContext.SaveChangesAsync();
         }
 
 
