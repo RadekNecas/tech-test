@@ -31,7 +31,7 @@ namespace Order.Data.Specifications.Evaluators
             return data.Select(specification.Select);
         }
 
-        public IQueryable<TEntity> EvaluateSpecification<TEntity>(ISpecification<TEntity, TEntity> specification, IQueryable<TEntity> data)
+        public IQueryable<TEntity> EvaluateSpecification<TEntity>(ISpecification<TEntity> specification, IQueryable<TEntity> data)
             where TEntity : class
         {
             if (specification.HasQuery)
