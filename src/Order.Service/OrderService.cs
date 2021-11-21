@@ -17,7 +17,7 @@ namespace Order.Service
             _orderRepository = orderRepository;
         }
 
-        public async Task<IEnumerable<OrderSummary>> GetOrdersAsync(OrderSpecification specification = null)
+        public async Task<IReadOnlyList<OrderSummary>> GetOrdersAsync(OrderSpecification specification = null)
         {
             if(specification != null && specification.Status != null)
             {

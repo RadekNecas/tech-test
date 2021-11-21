@@ -8,11 +8,10 @@ namespace Order.Data
 {
     public interface IOrderRepository
     {
-        Task<IEnumerable<OrderSummary>> GetOrdersAsync();
-
-        Task<IEnumerable<OrderSummary>> GetOrdersAsync(string status);
+        Task<IReadOnlyList<OrderSummary>> GetOrdersAsync();
 
         Task<OrderDetail> GetOrderByIdAsync(Guid orderId);
-        Task<IEnumerable<OrderSummary>> GetOrdersAsync(ISpecification<Entities.Order, OrderSummary> specification);
+
+        Task<IReadOnlyList<OrderSummary>> GetOrdersAsync(ISpecification<Entities.Order, OrderSummary> specification);
     }
 }
